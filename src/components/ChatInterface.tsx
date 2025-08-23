@@ -1,6 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Bot, User, ArrowLeft, Copy, MoreVertical, Edit2, Check, X } from 'lucide-react';
-import { saveMessage, getChatMessages, updateChatTitle } from '../lib/graphql';
+import { Send, Bot, User, ArrowLeft, Copy, MoreVertical } from 'lucide-react';
 
 interface Message {
   id: string;
@@ -14,64 +13,20 @@ interface ChatInterfaceProps {
   chatTitle: string;
   user: { id: string; email: string };
   onBack: () => void;
-  onTitleUpdate?: (newTitle: string) => void;
 }
 
-const ChatInterface: React.FC<ChatInterfaceProps> = ({ chatId, chatTitle, user, onBack, onTitleUpdate }) => {
-  const [messages, setMessages] = useState<Message[]>([]);
+const ChatInterface: React.FC<ChatInterfaceProps> = ({ chatId, chatTitle, user, onBack }) => {
+  const [messages, setMessages] = useState<Message[]>([
+    {
+      id: '1',
+      content: 'Hello! I\'m your AI assistant. How can I help you today?',
+      isBot: true,
+      timestamp: new Date()
+    }
+  ]);
   const [inputMessage, setInputMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [isLoadingMessages, setIsLoadingMessages] = useState(true);
-  const [isEditingTitle, setIsEditingTitle] = useState(false);
-  const [editedTitle, setEditedTitle] = useState(chatTitle);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-
-  // Load chat messages on component mount
-  useEffect(() => {
-    const loadMessages = async () => {
-      try {
-        const chatMessages = await getChatMessages(chatId);
-        const formattedMessages: Message[] = chatMessages.map((msg: any) => ({
-          id: msg.id,
-          content: msg.content,
-          isBot: msg.is_bot,
-          timestamp: new Date(msg.created_at)
-        }));
-        
-        // If no messages exist, add welcome message
-        if (formattedMessages.length === 0) {
-          const welcomeMessage: Message = {
-            id: 'welcome',
-            content: 'Hello! I\'m your AI assistant. How can I help you today?',
-            isBot: true,
-            timestamp: new Date()
-          };
-          setMessages([welcomeMessage]);
-          // Save welcome message to database
-          try {
-            await saveMessage(chatId, welcomeMessage.content, true, user.id);
-          } catch (error) {
-            console.error('Failed to save welcome message:', error);
-          }
-        } else {
-          setMessages(formattedMessages);
-        }
-      } catch (error) {
-        console.error('Failed to load messages:', error);
-        // Fallback to welcome message
-        setMessages([{
-          id: 'welcome',
-          content: 'Hello! I\'m your AI assistant. How can I help you today?',
-          isBot: true,
-          timestamp: new Date()
-        }]);
-      } finally {
-        setIsLoadingMessages(false);
-      }
-    };
-
-    loadMessages();
-  }, [chatId, user.id]);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -157,13 +112,6 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chatId, chatTitle, user, 
     setInputMessage('');
     setIsLoading(true);
 
-    // Save user message to database
-    try {
-      await saveMessage(chatId, userMessage.content, false, user.id);
-    } catch (error) {
-      console.error('Failed to save user message:', error);
-    }
-
     try {
       const botResponse = await sendToN8N(userMessage.content);
       
@@ -175,13 +123,6 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chatId, chatTitle, user, 
       };
       
       setMessages(prev => [...prev, botMessage]);
-      
-      // Save bot message to database
-      try {
-        await saveMessage(chatId, botMessage.content, true, user.id);
-      } catch (error) {
-        console.error('Failed to save bot message:', error);
-      }
     } catch (error) {
       const errorMessage: Message = {
         id: (Date.now() + 1).toString(),
@@ -190,13 +131,6 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chatId, chatTitle, user, 
         timestamp: new Date()
       };
       setMessages(prev => [...prev, errorMessage]);
-      
-      // Save error message to database
-      try {
-        await saveMessage(chatId, errorMessage.content, true, user.id);
-      } catch (error) {
-        console.error('Failed to save error message:', error);
-      }
     } finally {
       setIsLoading(false);
     }
@@ -204,29 +138,6 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chatId, chatTitle, user, 
 
   const copyMessage = (content: string) => {
     navigator.clipboard.writeText(content);
-  };
-
-  const handleTitleSave = async () => {
-    if (!editedTitle.trim() || editedTitle === chatTitle) {
-      setIsEditingTitle(false);
-      setEditedTitle(chatTitle);
-      return;
-    }
-
-    try {
-      await updateChatTitle(chatId, editedTitle.trim());
-      onTitleUpdate?.(editedTitle.trim());
-      setIsEditingTitle(false);
-    } catch (error) {
-      console.error('Failed to update chat title:', error);
-      setEditedTitle(chatTitle);
-      setIsEditingTitle(false);
-    }
-  };
-
-  const handleTitleCancel = () => {
-    setEditedTitle(chatTitle);
-    setIsEditingTitle(false);
   };
 
   return (
@@ -245,67 +156,18 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chatId, chatTitle, user, 
               <Bot className="w-6 h-6 text-white" />
             </div>
             <div>
-            <div className="flex items-center space-x-2">
-              {isEditingTitle ? (
-                <div className="flex items-center space-x-2">
-                  <input
-                    type="text"
-                    value={editedTitle}
-                    onChange={(e) => setEditedTitle(e.target.value)}
-                    className="text-sm font-semibold text-gray-900 bg-transparent border-b border-gray-300 focus:outline-none focus:border-blue-500 min-w-0 flex-1"
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') handleTitleSave();
-                      if (e.key === 'Escape') handleTitleCancel();
-                    }}
-                    autoFocus
-                  />
-                  <button
-                    onClick={handleTitleSave}
-                    className="p-1 hover:bg-gray-100 rounded transition-colors"
-                  >
-                    <Check className="w-4 h-4 text-green-600" />
-                  </button>
-                  <button
-                    onClick={handleTitleCancel}
-                    className="p-1 hover:bg-gray-100 rounded transition-colors"
-                  >
-                    <X className="w-4 h-4 text-red-600" />
-                  </button>
-                </div>
-              ) : (
-                <div className="flex items-center space-x-2">
-                  <h1 className="font-semibold text-gray-900">{chatTitle}</h1>
-                  <button
-                    onClick={() => setIsEditingTitle(true)}
-                    className="p-1 hover:bg-gray-100 rounded transition-colors opacity-0 group-hover:opacity-100"
-                  >
-                    <Edit2 className="w-3 h-3 text-gray-500" />
-                  </button>
-                </div>
-              )}
-            </div>
+              <h1 className="font-semibold text-gray-900">{chatTitle}</h1>
               <p className="text-sm text-gray-500">AI Assistant</p>
             </div>
           </div>
         </div>
-        <div className="group">
-          <button className="p-2 hover:bg-gray-100 rounded-full transition-colors">
+        <button className="p-2 hover:bg-gray-100 rounded-full transition-colors">
           <MoreVertical className="w-5 h-5 text-gray-600" />
         </button>
-        </div>
       </div>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto p-6 space-y-6 relative">
-        {isLoadingMessages && (
-          <div className="absolute inset-0 flex items-center justify-center bg-white bg-opacity-75">
-            <div className="text-center">
-              <div className="animate-spin rounded-full h-8 w-8 border-4 border-blue-600 border-t-transparent mx-auto mb-2"></div>
-              <p className="text-sm text-gray-600">Loading messages...</p>
-            </div>
-          </div>
-        )}
-        
+      <div className="flex-1 overflow-y-auto p-6 space-y-6">
         {messages.map((message) => (
           <div
             key={message.id}
