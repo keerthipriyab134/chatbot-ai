@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { nhost } from './lib/nhost';
 import SignIn from './components/SignIn';
 import Dashboard from './components/Dashboard';
+import EmailVerification from './components/EmailVerification';
 
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -9,6 +10,7 @@ function App() {
   const [authError, setAuthError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [verificationMessage, setVerificationMessage] = useState<string | null>(null);
+  const [showEmailVerification, setShowEmailVerification] = useState(false);
 
   // Check authentication state on app load
   useEffect(() => {
@@ -23,34 +25,10 @@ function App() {
         const type = urlParams.get('type');
         
         if (type === 'verifyEmail' && refreshToken) {
-          try {
-            // Handle email verification
-            // Verify the email using the refresh token
-            const verificationResult = await nhost.auth.setSession({ refreshToken });
-            
-            if (verificationResult.session) {
-              // Email verified successfully, but don't sign in automatically
-              // Sign out immediately and show success message
-              await nhost.auth.signOut();
-              setVerificationMessage('Email verified successfully! You can now sign in with your credentials.');
-              setIsAuthenticated(false);
-              setUser(null);
-            } else {
-              setAuthError('Email verification failed. Please try again or contact support.');
-            }
-            
-            // Clear the URL parameters to show clean sign-in page
-            window.history.replaceState({}, document.title, window.location.pathname);
-            setIsLoading(false);
-            return;
-          } catch (error) {
-            console.error('Email verification error:', error);
-            setAuthError('Email verification failed. Please try again or contact support.');
-            // Clear the URL parameters
-            window.history.replaceState({}, document.title, window.location.pathname);
-            setIsLoading(false);
-            return;
-          }
+          // Show email verification page
+          setShowEmailVerification(true);
+          setIsLoading(false);
+          return;
         } else {
           // For normal page loads, ensure we start with a clean state
           setIsAuthenticated(false);
@@ -147,6 +125,13 @@ function App() {
     window.history.replaceState({}, document.title, window.location.pathname);
   };
 
+  const handleGoToSignIn = () => {
+    setShowEmailVerification(false);
+    setVerificationMessage('Email verified successfully! You can now sign in with your credentials.');
+    // Clear URL parameters
+    window.history.replaceState({}, document.title, window.location.pathname);
+  };
+
   // Show loading state while checking authentication
   if (isLoading) {
     return (
@@ -157,6 +142,11 @@ function App() {
         </div>
       </div>
     );
+  }
+
+  // Show email verification page
+  if (showEmailVerification) {
+    return <EmailVerification onGoToSignIn={handleGoToSignIn} />;
   }
 
   return (
