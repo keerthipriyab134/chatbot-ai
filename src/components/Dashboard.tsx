@@ -166,6 +166,18 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onSignOut, verificationMess
           </div>
         </div>
 
+        {/* Placeholder Content */}
+        <div className="bg-white rounded-2xl p-8 shadow-sm border border-gray-100">
+          <div className="text-center">
+            <div className="w-16 h-16 bg-blue-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
+              <Bot className="w-8 h-8 text-blue-600" />
+            </div>
+            <h3 className="text-xl font-semibold text-gray-900 mb-2">Ready for nhost integration!</h3>
+            <p className="text-gray-600 max-w-md mx-auto">
+              Your Chat Bot dashboard is set up and ready. Connect with nhost to enable real authentication and data management.
+            </p>
+          </div>
+        </div>
       </main>
     </div>
   );

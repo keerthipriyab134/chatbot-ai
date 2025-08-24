@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { nhost } from './lib/nhost';
 import SignIn from './components/SignIn';
 import Dashboard from './components/Dashboard';
-import EmailVerificationSuccess from './components/EmailVerificationSuccess';
 
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -10,7 +9,6 @@ function App() {
   const [authError, setAuthError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [verificationMessage, setVerificationMessage] = useState<string | null>(null);
-  const [showVerificationSuccess, setShowVerificationSuccess] = useState(false);
 
   // Check authentication state on app load
   useEffect(() => {
@@ -31,9 +29,12 @@ function App() {
             const verificationResult = await nhost.auth.setSession({ refreshToken });
             
             if (verificationResult.session) {
-              // Email verified successfully, show success page
+              // Email verified successfully, but don't sign in automatically
+              // Sign out immediately and show success message
               await nhost.auth.signOut();
-              setShowVerificationSuccess(true);
+              setVerificationMessage('Email verified successfully! You can now sign in with your credentials.');
+              setIsAuthenticated(false);
+              setUser(null);
             } else {
               setAuthError('Email verification failed. Please try again or contact support.');
             }
@@ -156,11 +157,6 @@ function App() {
         </div>
       </div>
     );
-  }
-
-  // Show email verification success page
-  if (showVerificationSuccess) {
-    return <EmailVerificationSuccess />;
   }
 
   return (
