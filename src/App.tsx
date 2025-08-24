@@ -1,73 +1,74 @@
-import { GraphQLClient } from 'graphql-request';
-import { nhost } from "./lib/nhost";
+import React, { useEffect, useState } from 'react';
+import { nhost } from './lib/nhost';
+import SignIn from './components/SignIn';
+import Dashboard from './components/Dashboard';
+import EmailVerificationSuccess from './components/EmailVerificationSuccess';
 
-// Create GraphQL client with dynamic headers
-export const createGraphQLClient = () => {
-  const client = new GraphQLClient(`${nhost.graphql.getUrl()}`, {
-    headers: {
-      'Authorization': `Bearer ${nhost.auth.getAccessToken()}`,
-    },
-  });
-  return client;
-};
+function App() {
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [showVerificationSuccess, setShowVerificationSuccess] = useState(false);
 
-// GraphQL mutations and queries
-export const INSERT_CHAT_MUTATION = `
-  mutation InsertChats($title: String, $user_id: uuid) {
-    insert_chats(objects: {title: $title, user_id: $user_id}) {
-      affected_rows
-      returning {
-        id
-        title
-        user_id
-        created_at
-        updated_at
+  useEffect(() => {
+    const handleAuth = async () => {
+      // Check if this is an email verification callback
+      const urlParams = new URLSearchParams(window.location.search);
+      const refreshToken = urlParams.get('refreshToken');
+      const type = urlParams.get('type');
+
+      if (refreshToken && type === 'verifyEmail') {
+        try {
+          // Handle email verification
+          await nhost.auth.setSession({ refreshToken });
+          
+          // Show success page instead of redirecting
+          setShowVerificationSuccess(true);
+          setIsLoading(false);
+          
+          // Clean up URL
+          window.history.replaceState({}, document.title, window.location.pathname);
+          return;
+        } catch (error) {
+          console.error('Email verification failed:', error);
+        }
       }
-    }
-  }
-`;
 
-export const GET_USER_CHATS_QUERY = `
-  query GetUserChats($user_id: uuid!) {
-    chats(where: {user_id: {_eq: $user_id}}, order_by: {updated_at: desc}) {
-      id
-      title
-      user_id
-      created_at
-      updated_at
-    }
-  }
-`;
+      // Clear any stale sessions on normal app load
+      await nhost.auth.signOut();
+      setIsAuthenticated(false);
+      setIsLoading(false);
+    };
 
-// Chat creation function
-export const createChat = async (title: string, userId: string) => {
-  const client = createGraphQLClient();
-  
-  try {
-    const data = await client.request(INSERT_CHAT_MUTATION, {
-      title,
-      user_id: userId,
+    handleAuth();
+
+    // Listen for auth state changes
+    const unsubscribe = nhost.auth.onAuthStateChanged((event, session) => {
+      if (event === 'SIGNED_IN' && session) {
+        setIsAuthenticated(true);
+      } else {
+        setIsAuthenticated(false);
+      }
+      setIsLoading(false);
     });
-    
-    return data.insert_chats.returning[0];
-  } catch (error) {
-    console.error('Error creating chat:', error);
-    throw error;
-  }
-};
 
-// Get user chats function
-export const getUserChats = async (userId: string) => {
-  const client = createGraphQLClient();
-  
-  try {
-    const data = await client.request(GET_USER_CHATS_QUERY, {
-      user_id: userId,
-    });
-    
-    return data.chats;
-  } catch (error) {
-    console.error('Error fetching chats:', error);
-    throw error;
+    return () => {
+      unsubscribe();
+    };
+  }, []);
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+      </div>
+    );
   }
-};
+
+  if (showVerificationSuccess) {
+    return <EmailVerificationSuccess />;
+  }
+
+  return isAuthenticated ? <Dashboard /> : <SignIn />;
+}
+
+export default App;
