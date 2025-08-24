@@ -59,7 +59,31 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chatId, chatTitle, user, 
         throw new Error(`HTTP error! status: ${response.status}`);
       }
 
-      const result = await response.json();
+      // Check if response has content before parsing JSON
+      const contentLength = response.headers.get('content-length');
+      if (response.status === 204 || contentLength === '0') {
+        return 'I received your message but got an empty response. Please try again.';
+      }
+
+      // Check if response has JSON content type
+      const contentType = response.headers.get('content-type');
+      if (!contentType || !contentType.includes('application/json')) {
+        const textResponse = await response.text();
+        return textResponse || 'I received your message but got an unexpected response format.';
+      }
+
+      // Safely parse JSON with fallback
+      let result;
+      try {
+        const responseText = await response.text();
+        if (!responseText.trim()) {
+          return 'I received your message but got an empty response. Please try again.';
+        }
+        result = JSON.parse(responseText);
+      } catch (parseError) {
+        console.error('JSON parsing error:', parseError);
+        return 'I received your message but couldn\'t understand the response format. Please try again.';
+      }
       
       // Handle different possible response formats
       console.log('n8n response:', result);
