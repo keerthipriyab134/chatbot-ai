@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { nhost } from './lib/nhost';
 import SignIn from './components/SignIn';
 import Dashboard from './components/Dashboard';
@@ -6,119 +6,180 @@ import EmailVerificationSuccess from './components/EmailVerificationSuccess';
 
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [user, setUser] = useState<{ id: string; email: string } | null>(null);
+  const [authError, setAuthError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [verificationMessage, setVerificationMessage] = useState<string | null>(null);
   const [showVerificationSuccess, setShowVerificationSuccess] = useState(false);
-  const [error, setError] = useState('');
-  const [verificationMessage, setVerificationMessage] = useState('');
-  const [user, setUser] = useState(null);
 
+  // Check authentication state on app load
   useEffect(() => {
-    const handleAuth = async () => {
-      // Check if this is an email verification callback
-      const urlParams = new URLSearchParams(window.location.search);
-      const refreshToken = urlParams.get('refreshToken');
-      const type = urlParams.get('type');
-
-      if (refreshToken && type === 'verifyEmail') {
-        try {
-          // Handle email verification
-          await nhost.auth.setSession({ refreshToken });
-          
-          // Show success page instead of redirecting
-          setShowVerificationSuccess(true);
-          setIsLoading(false);
-          
-          // Clean up URL
-          window.history.replaceState({}, document.title, window.location.pathname);
-          return;
-        } catch (error) {
-          console.error('Email verification failed:', error);
+    const checkAuthState = async () => {
+      try {
+        // First, clear any potentially stale session data
+        await nhost.auth.signOut();
+        
+        // Check if this is an email verification callback
+        const urlParams = new URLSearchParams(window.location.search);
+        const refreshToken = urlParams.get('refreshToken');
+        const type = urlParams.get('type');
+        
+        if (type === 'verifyEmail' && refreshToken) {
+          try {
+            // Handle email verification
+            // Verify the email using the refresh token
+            const verificationResult = await nhost.auth.setSession({ refreshToken });
+            
+            if (verificationResult.session) {
+              // Email verified successfully, show success page
+              await nhost.auth.signOut();
+              setShowVerificationSuccess(true);
+            } else {
+              setAuthError('Email verification failed. Please try again or contact support.');
+            }
+            
+            // Clear the URL parameters to show clean sign-in page
+            window.history.replaceState({}, document.title, window.location.pathname);
+            setIsLoading(false);
+            return;
+          } catch (error) {
+            console.error('Email verification error:', error);
+            setAuthError('Email verification failed. Please try again or contact support.');
+            // Clear the URL parameters
+            window.history.replaceState({}, document.title, window.location.pathname);
+            setIsLoading(false);
+            return;
+          }
+        } else {
+          // For normal page loads, ensure we start with a clean state
+          setIsAuthenticated(false);
+          setUser(null);
+          setAuthError(null);
         }
-      }
-
-      // Check existing session
-      const session = nhost.auth.getSession();
-      if (session) {
-        setIsAuthenticated(true);
-        setUser(session.user);
-      } else {
-        setIsAuthenticated(false);
-      }
-      setIsLoading(false);
-    };
-
-    handleAuth();
-
-    // Listen for auth state changes
-    const unsubscribe = nhost.auth.onAuthStateChanged((event, session) => {
-      if (event === 'SIGNED_IN' && session) {
-        setIsAuthenticated(true);
-        setUser(session.user);
-      } else {
+      } catch (error) {
+        console.error('Error checking auth state:', error);
+        // Ensure clean state on error
         setIsAuthenticated(false);
         setUser(null);
+        setAuthError(null);
+      } finally {
+        setIsLoading(false);
       }
-      setIsLoading(false);
-    });
-
-    return () => {
-      unsubscribe();
     };
+
+    checkAuthState();
   }, []);
 
   const handleSignIn = async (email: string, password: string) => {
-    setError('');
+    setAuthError(null);
+    setVerificationMessage(null);
+    
     try {
-      const { error } = await nhost.auth.signIn({ email, password });
+      const signInResult = await nhost.auth.signIn({
+        email,
+        password,
+      });
+      
+      const { session, error } = signInResult;
+
       if (error) {
-        setError(error.message);
+        setAuthError(error.message);
+        return;
       }
-    } catch (err) {
-      setError('An unexpected error occurred');
+
+      if (session) {
+        setUser({ 
+          id: session.user.id,
+          email: session.user.email 
+        });
+        setIsAuthenticated(true);
+      }
+    } catch (error) {
+      setAuthError('An unexpected error occurred. Please try again.');
+      console.error('Authentication error:', error);
     }
   };
 
   const handleSignUp = async (email: string, password: string) => {
-    setError('');
+    setAuthError(null);
+    setVerificationMessage(null);
+    
     try {
-      const { error } = await nhost.auth.signUp({ email, password });
+      const signUpResult = await nhost.auth.signUp({
+        email,
+        password,
+      });
+      
+      const { session, error } = signUpResult;
+
       if (error) {
-        setError(error.message);
-      } else {
-        setVerificationMessage('Please check your email to verify your account.');
+        setAuthError(error.message);
+        return;
       }
-    } catch (err) {
-      setError('An unexpected error occurred');
+
+      // For nhost, after signup, user might need to verify email
+      // If session exists immediately, sign them in
+      if (session) {
+        setUser({ 
+          id: session.user.id,
+          email: session.user.email 
+        });
+        setIsAuthenticated(true);
+      } else {
+        // If no session (email verification required), show success message
+        setAuthError('Account created successfully! Please check your email to verify your account, then sign in.');
+      }
+    } catch (error) {
+      setAuthError('An unexpected error occurred during signup. Please try again.');
+      console.error('Signup error:', error);
     }
   };
 
-  const handleSignOut = async () => {
-    await nhost.auth.signOut();
-    // Clear URL parameters when signing out
+  const handleSignOut = () => {
+    nhost.auth.signOut();
+    setIsAuthenticated(false);
+    setUser(null);
+    setAuthError(null);
+    setVerificationMessage(null);
+    
+    // Clear any URL parameters that might cause issues
     window.history.replaceState({}, document.title, window.location.pathname);
   };
 
+  // Show loading state while checking authentication
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-4 border-blue-600 border-t-transparent mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading...</p>
+        </div>
       </div>
     );
   }
 
+  // Show email verification success page
   if (showVerificationSuccess) {
     return <EmailVerificationSuccess />;
   }
 
-  return isAuthenticated ? (
-    <Dashboard user={user} onSignOut={handleSignOut} />
-  ) : (
-    <SignIn 
-      onSignIn={handleSignIn}
-      onSignUp={handleSignUp}
-      error={error}
-      verificationMessage={verificationMessage}
-    />
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50">
+      {!isAuthenticated ? (
+        <SignIn 
+          onSignIn={handleSignIn}
+          onSignUp={handleSignUp}
+          error={authError}
+          verificationMessage={verificationMessage}
+        />
+      ) : (
+        <Dashboard 
+          user={user} 
+          onSignOut={handleSignOut}
+          verificationMessage={verificationMessage}
+        />
+      )}
+    </div>
   );
 }
 
