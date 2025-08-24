@@ -39,6 +39,32 @@ export const GET_USER_CHATS_QUERY = `
   }
 `;
 
+export const GET_CHAT_MESSAGES_QUERY = `
+  query GetChatMessages($chat_id: uuid!) {
+    messages(where: {chat_id: {_eq: $chat_id}}, order_by: {created_at: asc}) {
+      id
+      content
+      chat_id
+      created_at
+      is_bot: role
+    }
+  }
+`;
+
+export const INSERT_MESSAGE_MUTATION = `
+  mutation InsertMessage($content: String!, $chat_id: uuid!, $role: String!) {
+    insert_messages(objects: {content: $content, chat_id: $chat_id, role: $role}) {
+      affected_rows
+      returning {
+        id
+        content
+        chat_id
+        role
+        created_at
+      }
+    }
+  }
+`;
 // Chat creation function
 export const createChat = async (title: string, userId: string) => {
   const client = createGraphQLClient();
