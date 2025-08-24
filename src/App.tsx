@@ -1,5 +1,5 @@
 import { GraphQLClient } from 'graphql-request';
-import { nhost } from './nhost';
+import { nhost } from "./lib/nhost";
 
 // Create GraphQL client with dynamic headers
 export const createGraphQLClient = () => {
