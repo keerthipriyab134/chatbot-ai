@@ -8,6 +8,9 @@ function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [showVerificationSuccess, setShowVerificationSuccess] = useState(false);
+  const [error, setError] = useState('');
+  const [verificationMessage, setVerificationMessage] = useState('');
+  const [user, setUser] = useState(null);
 
   useEffect(() => {
     const handleAuth = async () => {
@@ -33,9 +36,14 @@ function App() {
         }
       }
 
-      // Clear any stale sessions on normal app load
-      await nhost.auth.signOut();
-      setIsAuthenticated(false);
+      // Check existing session
+      const session = nhost.auth.getSession();
+      if (session) {
+        setIsAuthenticated(true);
+        setUser(session.user);
+      } else {
+        setIsAuthenticated(false);
+      }
       setIsLoading(false);
     };
 
@@ -45,8 +53,10 @@ function App() {
     const unsubscribe = nhost.auth.onAuthStateChanged((event, session) => {
       if (event === 'SIGNED_IN' && session) {
         setIsAuthenticated(true);
+        setUser(session.user);
       } else {
         setIsAuthenticated(false);
+        setUser(null);
       }
       setIsLoading(false);
     });
@@ -55,6 +65,38 @@ function App() {
       unsubscribe();
     };
   }, []);
+
+  const handleSignIn = async (email: string, password: string) => {
+    setError('');
+    try {
+      const { error } = await nhost.auth.signIn({ email, password });
+      if (error) {
+        setError(error.message);
+      }
+    } catch (err) {
+      setError('An unexpected error occurred');
+    }
+  };
+
+  const handleSignUp = async (email: string, password: string) => {
+    setError('');
+    try {
+      const { error } = await nhost.auth.signUp({ email, password });
+      if (error) {
+        setError(error.message);
+      } else {
+        setVerificationMessage('Please check your email to verify your account.');
+      }
+    } catch (err) {
+      setError('An unexpected error occurred');
+    }
+  };
+
+  const handleSignOut = async () => {
+    await nhost.auth.signOut();
+    // Clear URL parameters when signing out
+    window.history.replaceState({}, document.title, window.location.pathname);
+  };
 
   if (isLoading) {
     return (
@@ -68,7 +110,16 @@ function App() {
     return <EmailVerificationSuccess />;
   }
 
-  return isAuthenticated ? <Dashboard /> : <SignIn />;
+  return isAuthenticated ? (
+    <Dashboard user={user} onSignOut={handleSignOut} />
+  ) : (
+    <SignIn 
+      onSignIn={handleSignIn}
+      onSignUp={handleSignUp}
+      error={error}
+      verificationMessage={verificationMessage}
+    />
+  );
 }
 
 export default App;
